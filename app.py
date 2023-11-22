@@ -1,8 +1,15 @@
-from flask import Flask,  render_template,redirect,request
+from flask import Flask,  render_template,redirect,request,session
 from flask_sqlalchemy import SQLAlchemy
-import bcrypt
+import bcrypt, os
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+
+db_user = os.getenv('SQL_USER')
+db_password = os.getenv('SQL_PASSWORD')
+db_host = os.getenv('SQL_HOST')
+db_name = os.getenv('SQL_DB_NAME')
+secret_key = os.getenv('SECRET_KEY')
+
+app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{db_user}:{db_password}@{db_host}/{db_name}'
 
 # database 
 db = SQLAlchemy(app)
@@ -27,7 +34,7 @@ with app.app_context():
 
 @app.route('/')
 def index():
-    return render_template('dashboard.html')
+    return redirect('/login')
 
 @app.route('/register',methods=['GET','POST'])
 def register():
@@ -48,9 +55,32 @@ def register():
 def login():
     if request.method == 'POST':
         #handle post request
-        pass
+        email = request.form['email']
+        password = request.form['password']
+
+        user = User.query.filter_by(email=email).first()
+        if user and user.check_password(password):
+            session['name'] = user.name
+            session['email'] = user.email
+
+            return redirect('/dashboard')
+        else:
+            return render_template('login.html',error='Invalid user')
     return render_template('login.html')
 
+
+@app.route('/dashboard')
+def dashboard():
+    if session['name']:
+        user = User.query.filter_by(email=session['email']).first()
+        return render_template('dashboard.html',user=user)
+    return redirect('/login')
+
+
+@app.route('/logout')
+def logout():
+    session.pop('email',None)
+    return redirect('/login')
 
 
 if __name__ == "__main__":
