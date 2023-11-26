@@ -1,85 +1,75 @@
-from flask import Flask,  render_template,redirect,request,session
-from flask_sqlalchemy import SQLAlchemy
+from flask import Flask, render_template, redirect, request, session
+from flask_mysqldb import MySQL
 import bcrypt, os
+
 app = Flask(__name__)
 
-db_user = os.getenv('SQL_USER')
-db_password = os.getenv('SQL_PASSWORD')
-db_host = os.getenv('SQL_HOST')
-db_name = os.getenv('SQL_DB_NAME')
-secret_key = os.getenv('SECRET_KEY')
+app.config['MYSQL_HOST'] = os.getenv('SQL_HOST')
+app.config['MYSQL_USER'] = os.getenv('SQL_USER')
+app.config['MYSQL_PASSWORD'] = os.getenv('SQL_PASSWORD')
+app.config['MYSQL_DB'] = os.getenv('SQL_DB_NAME')
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 
-app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{db_user}:{db_password}@{db_host}/{db_name}'
-
-# database 
-db = SQLAlchemy(app)
-
-class User(db.Model):
-    id = db.Column(db.Integer,primary_key=True)
-    name = db.Column(db.String(100),nullable=False)
-    email = db.Column(db.String(100),unique=True)
-    password = db.Column(db.String(100))
-
-    def __init__(self,name,email,password):
-        self.name = name
-        self.email =email
-        self.password = bcrypt.hashpw(password.encode('utf-8'),bcrypt.gensalt()).decode('utf-8')
-
-    def check_password(self,password):
-        return bcrypt.checkpw(password.encode('utf-8'),self.password.encode('utf-8'))
-
-# create tables
-with app.app_context():
-    db.create_all
+mysql = MySQL(app)
 
 @app.route('/')
 def index():
     return redirect('/login')
 
-@app.route('/register',methods=['GET','POST'])
+@app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        #handle post request
         name = request.form['name']
         email = request.form['email']
         password = request.form['password']
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
-        new_user = User(name=name,email=email,password=password)
-        db.session.add(new_user)
-        db.session.commit()
+        cur = mysql.connection.cursor()
+        cur.execute("INSERT INTO users (name, email, password) VALUES (%s, %s, %s)", (name, email, hashed_password))
+        mysql.connection.commit()
+        cur.close()
+
         return redirect('/login')
     return render_template('register.html')
 
 
-@app.route('/login',methods=['GET','POST'])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        #handle post request
         email = request.form['email']
         password = request.form['password']
 
-        user = User.query.filter_by(email=email).first()
-        if user and user.check_password(password):
-            session['name'] = user.name
-            session['email'] = user.email
+        cur = mysql.connection.cursor()
+        cur.execute("SELECT * FROM users WHERE email = %s", (email,))
+        user = cur.fetchone()
+        cur.close()
+
+        if user and bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8')):
+            session['name'] = user['name']
+            session['email'] = user['email']
 
             return redirect('/dashboard')
         else:
-            return render_template('login.html',error='Invalid user')
+            return render_template('login.html', error='Invalid user')
     return render_template('login.html')
 
 
 @app.route('/dashboard')
 def dashboard():
-    if session['name']:
-        user = User.query.filter_by(email=session['email']).first()
-        return render_template('dashboard.html',user=user)
+    if 'name' in session:
+        cur = mysql.connection.cursor()
+        cur.execute("SELECT * FROM users WHERE email = %s", (session['email'],))
+        user = cur.fetchone()
+        cur.close()
+        
+        return render_template('dashboard.html', user=user)
     return redirect('/login')
 
 
 @app.route('/logout')
 def logout():
-    session.pop('email',None)
+    session.pop('email', None)
+    session.pop('name', None)
     return redirect('/login')
 
 
