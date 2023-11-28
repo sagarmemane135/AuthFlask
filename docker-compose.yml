@@ -1,0 +1,29 @@
+version: '3'
+services:
+  backend:
+    image: 'memanes688/flaskauthapp:latest'
+    ports:
+      - '5000:5000'
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_USER: 'appu'
+      MYSQL_PASSWORD: 'appu@Sagar135'
+      MYSQL_DB: 'myDb'
+      SECRET_KEY: 'KittiGoddd'
+    depends_on:
+      - mysql
+  mysql:
+    image: 'mysql:5.7'
+    environment:
+      MYSQL_DATABASE: 'myDb'
+      MYSQL_USER: 'appu'
+      MYSQL_PASSWORD: 'appu@Sagar135'
+      MYSQL_ROOT_PASSWORD: 'KittiGoddd@Sagar135'
+    ports:
+      - '3306:3306'
+    volumes:
+      - ./createdb.sql:/docker-entrypoint-initdb.d/createdb.sql
+      - mysql-data:/var/lib/mysql
+volumes:
+  mysql-data: 
+
